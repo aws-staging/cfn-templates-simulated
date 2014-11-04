@@ -1,0 +1,119 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09", 
+
+  "Description": "Elastic Beanstalk Application and Environment for Flask + Python instance to run New Startup SignUp application using external data stores.",
+
+  "Resources" : {
+
+    "ApplicationRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [ {
+            "Effect": "Allow",
+            "Principal": {
+              "Service": [ "ec2.amazonaws.com" ]
+            },
+            "Action": [ "sts:AssumeRole" ]
+          } ]
+        },
+        "Path": "/",
+        "Policies": [ {
+          "PolicyName": "flask-application",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Effect": "Allow",
+                "Action":   [ "dynamodb:PutItem" ],
+                "Resource": [ "*" ]
+              },
+              {
+                "Effect": "Allow",
+                "Action":   [ "sns:Publish" ],
+                "Resource": [ "*" ]
+              }
+            ]
+          }
+        } ]
+      }
+    },
+
+    "AppInstanceProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Properties": {
+        "Path": "/",
+        "Roles": [ {
+          "Ref": "ApplicationRole"
+        } ]
+      }
+    },
+
+    "SignUpApplication": {
+      "Type": "AWS::ElasticBeanstalk::Application",
+      "Properties": {
+        "ApplicationName": "Startup Signup Simulated",
+        "Description": "Python Flask SignUp Application"
+      }
+    },
+    
+    "SignUpApplicationVersion": {
+      "Type" : "AWS::ElasticBeanstalk::ApplicationVersion",
+      "Properties": {
+        "ApplicationName": { "Ref" : "SignUpApplication"  },
+        "Description": "Version 1.1.1",
+        "SourceBundle": { 
+          "S3Bucket": { "Fn::Join" : ["-", [ "application-bundles", { "Ref" : "AWS::Region" } ] ] },
+          "S3Key": "py-flask-signup-v1.1.1.zip"
+        }
+      }
+    },
+
+    "SignUpApplicationConfig": {
+      "Type": "AWS::ElasticBeanstalk::ConfigurationTemplate",
+      "Properties": {
+        "ApplicationName": { "Ref" : "SignUpApplication" },
+        "Description": "SignUp Application Configuration Template",
+        "SolutionStackName" : "64bit Amazon Linux 2014.03 v1.0.9 running Python 2.7",
+        "OptionSettings": [ 
+          {
+            "Namespace": "aws:autoscaling:asg",
+            "OptionName": "MinSize",
+            "Value": "1"
+          },
+          {
+            "Namespace": "aws:autoscaling:launchconfiguration",
+            "OptionName": "InstanceType",
+            "Value": "m3.medium"
+          },
+          {
+            "Namespace": "aws:autoscaling:launchconfiguration",
+            "OptionName": "IamInstanceProfile",
+            "Value": { "Ref" : "AppInstanceProfile" }
+          }
+        ]
+      }
+    },
+
+    "SignUpApplicationEnvironment": {
+      "Type" : "AWS::ElasticBeanstalk::Environment",
+      "Properties": { 
+        "ApplicationName": { "Ref" : "SignUpApplication" },
+        "Description": "SignUp Application v1.1.1 Environment",
+        "TemplateName": { "Ref" : "SignUpApplicationConfig" },
+        "VersionLabel": { "Ref" : "SignUpApplicationVersion" }
+      }
+    }
+
+  },
+
+  "Outputs": {
+
+    "ElasticBeanstalkUrl": {
+      "Description": "The ElasticBeanstalk ELB URL of 1.1.1 website",
+      "Value": { "Fn::Join": ["", ["http:\/\/", { "Fn::GetAtt": [ "SignUpApplicationEnvironment", "EndpointURL" ] } ] ] }
+    }
+
+  }
+
+}
